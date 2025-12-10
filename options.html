@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>InvenTree Item Lookup Settings</title>
+  <style>
+    html, body {
+      width: 420px;
+      min-height: 320px;
+      overflow: hidden;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      padding: 20px;
+      background: #f5f5f5;
+      box-sizing: border-box;
+      margin: 0;
+    }
+    h1 {
+      font-size: 18px;
+      margin: 0 0 20px 0;
+      color: #333;
+    }
+    .field {
+      margin-bottom: 15px;
+    }
+    label {
+      display: block;
+      font-weight: 500;
+      margin-bottom: 5px;
+      color: #555;
+    }
+    input[type="text"], input[type="password"], input[type="url"] {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+    input:focus {
+      outline: none;
+      border-color: #4a90d9;
+      box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.2);
+    }
+    button {
+      background: #4a90d9;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #3a7fc8;
+    }
+    .status {
+      margin-top: 15px;
+      padding: 10px;
+      border-radius: 4px;
+      display: none;
+    }
+    .status.success {
+      display: block;
+      background: #d4edda;
+      color: #155724;
+    }
+    .status.error {
+      display: block;
+      background: #f8d7da;
+      color: #721c24;
+    }
+    .help {
+      font-size: 12px;
+      color: #666;
+      margin-top: 5px;
+    }
+    .help a {
+      color: #4a90d9;
+    }
+  </style>
+</head>
+<body>
+  <h1>InvenTree Item Lookup Settings</h1>
+  
+  <div class="field">
+    <label for="inventreeUrl">InvenTree URL</label>
+    <input type="url" id="inventreeUrl" placeholder="https://inventree.example.com">
+    <p class="help">
+      The base URL of your InvenTree server (without trailing slash)
+    </p>
+  </div>
+  
+  <div class="field">
+    <label for="apiToken">API Token</label>
+    <input type="password" id="apiToken" placeholder="Enter your InvenTree API token">
+    <p class="help">
+      Get your token from InvenTree: Settings → Account Settings → Access Tokens
+    </p>
+  </div>
+  
+  <button id="save">Save Settings</button>
+  <button id="test" style="background: #6c757d; margin-left: 10px;">Test Connection</button>
+  
+  <div id="status" class="status"></div>
+  
+  <script src="options.js"></script>
+</body>
+</html>
