@@ -219,28 +219,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   await performLookup(info.selectionText, tab.id);
 });
 
-// Handle keyboard shortcut
-chrome.commands.onCommand.addListener(async (command) => {
-  if (command !== 'lookup-selection') return;
-  
-  // Get the active tab
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab) return;
-  
-  // Get selected text from the page
-  try {
-    const [result] = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: () => window.getSelection().toString()
-    });
-    
-    if (result?.result) {
-      await performLookup(result.result, tab.id);
-    }
-  } catch (error) {
-    console.error('Failed to get selection:', error);
-  }
-});
 
 // Handle omnibox input
 chrome.omnibox.onInputEntered.addListener(async (text) => {

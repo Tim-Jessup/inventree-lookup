@@ -32,12 +32,12 @@
     "keyword": "inv"
   },
   "commands": {
-    "lookup-selection": {
+    "_execute_action": {
       "suggested_key": {
         "default": "Alt+I",
         "mac": "Alt+I"
       },
-      "description": "Look up selected text in InvenTree"
+      "description": "Activate InvenTree Lookup extension"
     }
   },
   "icons": {
