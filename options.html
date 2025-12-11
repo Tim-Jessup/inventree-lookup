@@ -79,6 +79,34 @@
     .help a {
       color: #4a90d9;
     }
+    .prefix-section {
+      margin-top: 20px;
+      padding-top: 15px;
+      border-top: 1px solid #ddd;
+    }
+    .prefix-section h2 {
+      font-size: 14px;
+      margin: 0 0 10px 0;
+      color: #333;
+    }
+    .prefix-list {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .prefix-item {
+      font-size: 13px;
+      color: #555;
+    }
+    .prefix-label {
+      color: #777;
+    }
+    .prefix-item code {
+      background: #e9ecef;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: monospace;
+    }
   </style>
 </head>
 <body>
@@ -102,9 +130,16 @@
   
   <button id="save">Save Settings</button>
   <button id="test" style="background: #6c757d; margin-left: 10px;">Test Connection</button>
-  
+
   <div id="status" class="status"></div>
-  
+
+  <div class="prefix-section">
+    <h2>Detected Reference Prefixes</h2>
+    <div id="prefixDisplay">
+      <p class="help">No prefixes detected yet. Click "Test Connection" to auto-detect.</p>
+    </div>
+  </div>
+
   <script src="options.js"></script>
 </body>
 </html>

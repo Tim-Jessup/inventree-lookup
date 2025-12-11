@@ -9,50 +9,72 @@ async function getBaseUrl() {
   return inventreeUrl.replace(/\/+$/, ''); // Remove trailing slashes
 }
 
-// Define patterns and their corresponding API endpoints and URL templates
-// Each pattern has: regex, apiEndpoint, apiParam, urlTemplate
-const PATTERNS = [
-  {
-    name: 'Part',
-    // CE followed by 3-4 digits, optional revision letter, optional variant (-XX), optional variant revision letter
-    regex: /^CE\d{3,4}[A-Z]?(-\d{2}[A-Z]?)?$/i,
-    apiEndpoint: '/api/part/',
-    apiParam: 'IPN',
-    urlTemplate: '/web/part/{id}/details'
-  },
-  {
-    name: 'Build Order',
-    // BO followed by 1-4+ digits
-    regex: /^BO\d+$/i,
-    apiEndpoint: '/api/build/',
-    apiParam: 'reference',
-    urlTemplate: '/web/manufacturing/build-order/{id}/details'
-  },
-  {
-    name: 'Purchase Order',
-    // PO followed by 1-4+ digits
-    regex: /^PO\d+$/i,
-    apiEndpoint: '/api/order/po/',
-    apiParam: 'reference',
-    urlTemplate: '/web/purchasing/purchase-order/{id}/detail'
-  },
-  {
-    name: 'Sales Order',
-    // CSO followed by 1-4+ digits
-    regex: /^CSO\d+$/i,
-    apiEndpoint: '/api/order/so/',
-    apiParam: 'reference',
-    urlTemplate: '/web/sales/sales-order/{id}/detail'
-  },
-  {
-    name: 'Return Order',
-    // RMA followed by 1-4+ digits
-    regex: /^RMA\d+$/i,
-    apiEndpoint: '/api/order/ro/',
-    apiParam: 'reference',
-    urlTemplate: '/web/sales/return-order/{id}/detail'
-  }
-];
+// Default prefixes (used if not detected from API)
+const DEFAULT_PREFIXES = {
+  buildOrderPrefix: 'BO-',
+  purchaseOrderPrefix: 'PO-',
+  salesOrderPrefix: 'SO-',
+  returnOrderPrefix: 'RMA-'
+};
+
+// Escape special regex characters in a string
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Build dynamic patterns based on detected/configured prefixes
+function buildPatterns(prefixes) {
+  const p = { ...DEFAULT_PREFIXES, ...prefixes };
+
+  return [
+    {
+      name: 'Part',
+      // CE followed by 3-4 digits, optional revision letter, optional variant (-XX), optional variant revision letter
+      regex: /^CE\d{3,4}[A-Z]?(-\d{2}[A-Z]?)?$/i,
+      apiEndpoint: '/api/part/',
+      apiParam: 'IPN',
+      urlTemplate: '/web/part/{id}/details'
+    },
+    {
+      name: 'Build Order',
+      // Prefix followed by digits
+      regex: new RegExp(`^${escapeRegex(p.buildOrderPrefix)}\\d+$`, 'i'),
+      apiEndpoint: '/api/build/',
+      apiParam: 'reference',
+      urlTemplate: '/web/manufacturing/build-order/{id}/details'
+    },
+    {
+      name: 'Purchase Order',
+      // Prefix followed by digits
+      regex: new RegExp(`^${escapeRegex(p.purchaseOrderPrefix)}\\d+$`, 'i'),
+      apiEndpoint: '/api/order/po/',
+      apiParam: 'reference',
+      urlTemplate: '/web/purchasing/purchase-order/{id}/detail'
+    },
+    {
+      name: 'Sales Order',
+      // Prefix followed by digits
+      regex: new RegExp(`^${escapeRegex(p.salesOrderPrefix)}\\d+$`, 'i'),
+      apiEndpoint: '/api/order/so/',
+      apiParam: 'reference',
+      urlTemplate: '/web/sales/sales-order/{id}/detail'
+    },
+    {
+      name: 'Return Order',
+      // Prefix followed by digits
+      regex: new RegExp(`^${escapeRegex(p.returnOrderPrefix)}\\d+$`, 'i'),
+      apiEndpoint: '/api/order/ro/',
+      apiParam: 'reference',
+      urlTemplate: '/web/sales/return-order/{id}/detail'
+    }
+  ];
+}
+
+// Get patterns with current prefixes from storage
+async function getPatterns() {
+  const { referencePrefixes } = await chrome.storage.sync.get('referencePrefixes');
+  return buildPatterns(referencePrefixes || {});
+}
 
 // Fallback URL when no pattern matches
 const FALLBACK_URL = '/web/part/category/index/parts';
@@ -67,8 +89,9 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 // Find matching pattern for selected text
-function findMatchingPattern(text) {
-  for (const pattern of PATTERNS) {
+async function findMatchingPattern(text) {
+  const patterns = await getPatterns();
+  for (const pattern of patterns) {
     if (pattern.regex.test(text)) {
       return pattern;
     }
@@ -124,7 +147,7 @@ async function performLookup(searchText, tabId = null) {
   }
   
   const selectedText = searchText.trim().toUpperCase();
-  const pattern = findMatchingPattern(selectedText);
+  const pattern = await findMatchingPattern(selectedText);
   
   // If no pattern matches, copy to clipboard and open fallback URL
   if (!pattern) {
@@ -227,7 +250,7 @@ chrome.omnibox.onInputEntered.addListener(async (text) => {
 
 // Provide suggestions in omnibox
 chrome.omnibox.onInputChanged.addListener(async (text, suggest) => {
-  const pattern = findMatchingPattern(text.trim().toUpperCase());
+  const pattern = await findMatchingPattern(text.trim().toUpperCase());
   if (pattern) {
     suggest([{
       content: text,
