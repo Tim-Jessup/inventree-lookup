@@ -22,19 +22,11 @@ function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-// Build dynamic patterns based on detected/configured prefixes
+// Build dynamic patterns for orders based on detected/configured prefixes
 function buildPatterns(prefixes) {
   const p = { ...DEFAULT_PREFIXES, ...prefixes };
 
   return [
-    {
-      name: 'Part',
-      // CE followed by 3-4 digits, optional revision letter, optional variant (-XX), optional variant revision letter
-      regex: /^CE\d{3,4}[A-Z]?(-\d{2}[A-Z]?)?$/i,
-      apiEndpoint: '/api/part/',
-      apiParam: 'IPN',
-      urlTemplate: '/web/part/{id}/details'
-    },
     {
       name: 'Build Order',
       // Prefix followed by digits
@@ -149,6 +141,32 @@ async function addToHistory(reference, type, url, success) {
   await chrome.storage.local.set({ lookupHistory: trimmed });
 }
 
+// Query an API endpoint and return results
+async function queryApi(baseUrl, apiToken, endpoint, param, searchText) {
+  const response = await fetch(
+    `${baseUrl}${endpoint}?${param}=${encodeURIComponent(searchText)}`,
+    {
+      headers: {
+        'Authorization': `Token ${apiToken}`,
+        'Content-Type': 'application/json'
+      }
+    }
+  );
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const data = await response.json();
+  const results = data.results || data;
+
+  if (!results || results.length === 0) {
+    return null;
+  }
+
+  return results[0];
+}
+
 // Main lookup function - used by context menu, keyboard shortcut, and omnibox
 async function performLookup(searchText, tabId = null) {
   const baseUrl = await getBaseUrl();
@@ -163,81 +181,45 @@ async function performLookup(searchText, tabId = null) {
   const pattern = await findMatchingPattern(selectedText);
   const fallbackUrl = await getFallbackUrl();
 
-  // If no pattern matches, copy to clipboard and open fallback URL
-  if (!pattern) {
-    await copyToClipboard(searchText.trim(), tabId);
-    await addToHistory(searchText.trim(), 'Search', `${baseUrl}${fallbackUrl}`, false);
-    chrome.tabs.create({
-      url: `${baseUrl}${fallbackUrl}`
-    });
-    return;
-  }
-
   // Get API token from storage
   const { apiToken } = await chrome.storage.sync.get('apiToken');
 
-  if (!apiToken) {
-    // No token configured - copy to clipboard and open fallback
-    await copyToClipboard(searchText.trim(), tabId);
-    await addToHistory(selectedText, pattern.name, `${baseUrl}${fallbackUrl}`, false);
-    chrome.tabs.create({
-      url: `${baseUrl}${fallbackUrl}`
-    });
-    return;
-  }
-
-  try {
-    // Query InvenTree API
-    const response = await fetch(
-      `${baseUrl}${pattern.apiEndpoint}?${pattern.apiParam}=${encodeURIComponent(selectedText)}`,
-      {
-        headers: {
-          'Authorization': `Token ${apiToken}`,
-          'Content-Type': 'application/json'
-        }
+  // If we have an order pattern match, look it up
+  if (pattern && apiToken) {
+    try {
+      const result = await queryApi(baseUrl, apiToken, pattern.apiEndpoint, pattern.apiParam, selectedText);
+      if (result) {
+        const url = `${baseUrl}${pattern.urlTemplate.replace('{id}', result.pk)}`;
+        await addToHistory(selectedText, pattern.name, url, true);
+        chrome.tabs.create({ url });
+        return;
       }
-    );
-
-    if (!response.ok) {
-      // API error - copy to clipboard and open fallback
-      await copyToClipboard(searchText.trim(), tabId);
-      await addToHistory(selectedText, pattern.name, `${baseUrl}${fallbackUrl}`, false);
-      chrome.tabs.create({
-        url: `${baseUrl}${fallbackUrl}`
-      });
-      return;
+    } catch (error) {
+      console.error('Order lookup failed:', error);
     }
-
-    const data = await response.json();
-
-    // Handle paginated results (check for 'results' array) or direct array
-    const results = data.results || data;
-
-    if (!results || results.length === 0) {
-      // No match found - copy to clipboard and open fallback
-      await copyToClipboard(searchText.trim(), tabId);
-      await addToHistory(selectedText, pattern.name, `${baseUrl}${fallbackUrl}`, false);
-      chrome.tabs.create({
-        url: `${baseUrl}${fallbackUrl}`
-      });
-      return;
-    }
-
-    // Open the first matching item directly
-    const itemId = results[0].pk;
-    const url = `${baseUrl}${pattern.urlTemplate.replace('{id}', itemId)}`;
-    await addToHistory(selectedText, pattern.name, url, true);
-    chrome.tabs.create({ url });
-
-  } catch (error) {
-    console.error('InvenTree lookup failed:', error);
-    // On any error, copy to clipboard and open fallback
-    await copyToClipboard(searchText.trim(), tabId);
-    await addToHistory(selectedText, pattern.name, `${baseUrl}${fallbackUrl}`, false);
-    chrome.tabs.create({
-      url: `${baseUrl}${fallbackUrl}`
-    });
   }
+
+  // No order pattern match (or lookup failed) - try parts API
+  if (apiToken) {
+    try {
+      const result = await queryApi(baseUrl, apiToken, '/api/part/', 'IPN', selectedText);
+      if (result) {
+        const url = `${baseUrl}/web/part/${result.pk}/details`;
+        await addToHistory(selectedText, 'Part', url, true);
+        chrome.tabs.create({ url });
+        return;
+      }
+    } catch (error) {
+      console.error('Part lookup failed:', error);
+    }
+  }
+
+  // No match found - copy to clipboard and open fallback
+  await copyToClipboard(searchText.trim(), tabId);
+  await addToHistory(searchText.trim(), 'Search', `${baseUrl}${fallbackUrl}`, false);
+  chrome.tabs.create({
+    url: `${baseUrl}${fallbackUrl}`
+  });
 }
 
 // Handle context menu click
@@ -263,7 +245,7 @@ chrome.omnibox.onInputChanged.addListener(async (text, suggest) => {
   } else {
     suggest([{
       content: text,
-      description: `Search InvenTree for: <match>${text}</match>`
+      description: `Look up in InvenTree: <match>${text.toUpperCase()}</match>`
     }]);
   }
 });
