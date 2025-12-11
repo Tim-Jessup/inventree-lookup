@@ -130,6 +130,12 @@ document.getElementById('searchInput').addEventListener('keydown', async (e) => 
       // Perform new lookup
       const text = e.target.value.trim();
       if (text) {
+        // Copy to clipboard from popup context (works reliably)
+        try {
+          await navigator.clipboard.writeText(text);
+        } catch (err) {
+          console.error('Failed to copy to clipboard:', err);
+        }
         chrome.runtime.sendMessage({ action: 'lookup', text });
         window.close();
       }

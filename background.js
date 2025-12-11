@@ -99,8 +99,9 @@ async function findMatchingPattern(text) {
   return null;
 }
 
-// Copy text to clipboard
+// Copy text to clipboard using tab context (for context menu)
 async function copyToClipboard(text, tabId) {
+  if (!tabId) return;
   try {
     await chrome.scripting.executeScript({
       target: { tabId: tabId },
@@ -151,24 +152,20 @@ async function performLookup(searchText, tabId = null) {
   
   // If no pattern matches, copy to clipboard and open fallback URL
   if (!pattern) {
-    if (tabId) {
-      await copyToClipboard(searchText.trim(), tabId);
-    }
+    await copyToClipboard(searchText.trim(), tabId);
     await addToHistory(searchText.trim(), 'Search', `${baseUrl}${FALLBACK_URL}`, false);
     chrome.tabs.create({
       url: `${baseUrl}${FALLBACK_URL}`
     });
     return;
   }
-  
+
   // Get API token from storage
   const { apiToken } = await chrome.storage.sync.get('apiToken');
-  
+
   if (!apiToken) {
     // No token configured - copy to clipboard and open fallback
-    if (tabId) {
-      await copyToClipboard(searchText.trim(), tabId);
-    }
+    await copyToClipboard(searchText.trim(), tabId);
     await addToHistory(selectedText, pattern.name, `${baseUrl}${FALLBACK_URL}`, false);
     chrome.tabs.create({
       url: `${baseUrl}${FALLBACK_URL}`
@@ -190,9 +187,7 @@ async function performLookup(searchText, tabId = null) {
     
     if (!response.ok) {
       // API error - copy to clipboard and open fallback
-      if (tabId) {
-        await copyToClipboard(searchText.trim(), tabId);
-      }
+      await copyToClipboard(searchText.trim(), tabId);
       await addToHistory(selectedText, pattern.name, `${baseUrl}${FALLBACK_URL}`, false);
       chrome.tabs.create({
         url: `${baseUrl}${FALLBACK_URL}`
@@ -207,9 +202,7 @@ async function performLookup(searchText, tabId = null) {
     
     if (!results || results.length === 0) {
       // No match found - copy to clipboard and open fallback
-      if (tabId) {
-        await copyToClipboard(searchText.trim(), tabId);
-      }
+      await copyToClipboard(searchText.trim(), tabId);
       await addToHistory(selectedText, pattern.name, `${baseUrl}${FALLBACK_URL}`, false);
       chrome.tabs.create({
         url: `${baseUrl}${FALLBACK_URL}`
@@ -226,9 +219,7 @@ async function performLookup(searchText, tabId = null) {
   } catch (error) {
     console.error('InvenTree lookup failed:', error);
     // On any error, copy to clipboard and open fallback
-    if (tabId) {
-      await copyToClipboard(searchText.trim(), tabId);
-    }
+    await copyToClipboard(searchText.trim(), tabId);
     await addToHistory(selectedText, pattern.name, `${baseUrl}${FALLBACK_URL}`, false);
     chrome.tabs.create({
       url: `${baseUrl}${FALLBACK_URL}`
