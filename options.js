@@ -63,12 +63,15 @@ async function fetchReferencePatterns(baseUrl, apiToken) {
 
 // Load saved settings
 document.addEventListener('DOMContentLoaded', async () => {
-  const { apiToken, inventreeUrl, referencePrefixes } = await chrome.storage.sync.get(['apiToken', 'inventreeUrl', 'referencePrefixes']);
+  const { apiToken, inventreeUrl, referencePrefixes, defaultLandingPage } = await chrome.storage.sync.get(['apiToken', 'inventreeUrl', 'referencePrefixes', 'defaultLandingPage']);
   if (apiToken) {
     document.getElementById('apiToken').value = apiToken;
   }
   if (inventreeUrl) {
     document.getElementById('inventreeUrl').value = inventreeUrl;
+  }
+  if (defaultLandingPage) {
+    document.getElementById('defaultLandingPage').value = defaultLandingPage;
   }
   // Display saved prefixes
   updatePrefixDisplay(referencePrefixes);
@@ -78,9 +81,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 document.getElementById('save').addEventListener('click', async () => {
   const apiToken = document.getElementById('apiToken').value.trim();
   const inventreeUrl = getBaseUrl();
-  
-  await chrome.storage.sync.set({ apiToken, inventreeUrl });
-  
+  const defaultLandingPage = document.getElementById('defaultLandingPage').value;
+
+  await chrome.storage.sync.set({ apiToken, inventreeUrl, defaultLandingPage });
+
   showStatus('Settings saved successfully!', 'success');
 });
 

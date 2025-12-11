@@ -76,8 +76,20 @@ async function getPatterns() {
   return buildPatterns(referencePrefixes || {});
 }
 
-// Fallback URL when no pattern matches
-const FALLBACK_URL = '/web/part/category/index/parts';
+// Default landing page options
+const LANDING_PAGES = {
+  parts: '/web/part/category/index/parts',
+  salesOrders: '/web/sales/index/salesorders',
+  purchaseOrders: '/web/purchasing/index/purchaseorders',
+  buildOrders: '/web/manufacturing/index/buildorders',
+  returnOrders: '/web/sales/index/returnorders'
+};
+
+// Get the fallback URL based on user preference
+async function getFallbackUrl() {
+  const { defaultLandingPage } = await chrome.storage.sync.get('defaultLandingPage');
+  return LANDING_PAGES[defaultLandingPage] || LANDING_PAGES.parts;
+}
 
 // Create context menu on install
 chrome.runtime.onInstalled.addListener(() => {
@@ -140,22 +152,23 @@ async function addToHistory(reference, type, url, success) {
 // Main lookup function - used by context menu, keyboard shortcut, and omnibox
 async function performLookup(searchText, tabId = null) {
   const baseUrl = await getBaseUrl();
-  
+
   // Check if URL is configured
   if (!baseUrl) {
     chrome.runtime.openOptionsPage();
     return;
   }
-  
+
   const selectedText = searchText.trim().toUpperCase();
   const pattern = await findMatchingPattern(selectedText);
-  
+  const fallbackUrl = await getFallbackUrl();
+
   // If no pattern matches, copy to clipboard and open fallback URL
   if (!pattern) {
     await copyToClipboard(searchText.trim(), tabId);
-    await addToHistory(searchText.trim(), 'Search', `${baseUrl}${FALLBACK_URL}`, false);
+    await addToHistory(searchText.trim(), 'Search', `${baseUrl}${fallbackUrl}`, false);
     chrome.tabs.create({
-      url: `${baseUrl}${FALLBACK_URL}`
+      url: `${baseUrl}${fallbackUrl}`
     });
     return;
   }
@@ -166,13 +179,13 @@ async function performLookup(searchText, tabId = null) {
   if (!apiToken) {
     // No token configured - copy to clipboard and open fallback
     await copyToClipboard(searchText.trim(), tabId);
-    await addToHistory(selectedText, pattern.name, `${baseUrl}${FALLBACK_URL}`, false);
+    await addToHistory(selectedText, pattern.name, `${baseUrl}${fallbackUrl}`, false);
     chrome.tabs.create({
-      url: `${baseUrl}${FALLBACK_URL}`
+      url: `${baseUrl}${fallbackUrl}`
     });
     return;
   }
-  
+
   try {
     // Query InvenTree API
     const response = await fetch(
@@ -184,45 +197,45 @@ async function performLookup(searchText, tabId = null) {
         }
       }
     );
-    
+
     if (!response.ok) {
       // API error - copy to clipboard and open fallback
       await copyToClipboard(searchText.trim(), tabId);
-      await addToHistory(selectedText, pattern.name, `${baseUrl}${FALLBACK_URL}`, false);
+      await addToHistory(selectedText, pattern.name, `${baseUrl}${fallbackUrl}`, false);
       chrome.tabs.create({
-        url: `${baseUrl}${FALLBACK_URL}`
+        url: `${baseUrl}${fallbackUrl}`
       });
       return;
     }
-    
+
     const data = await response.json();
-    
+
     // Handle paginated results (check for 'results' array) or direct array
     const results = data.results || data;
-    
+
     if (!results || results.length === 0) {
       // No match found - copy to clipboard and open fallback
       await copyToClipboard(searchText.trim(), tabId);
-      await addToHistory(selectedText, pattern.name, `${baseUrl}${FALLBACK_URL}`, false);
+      await addToHistory(selectedText, pattern.name, `${baseUrl}${fallbackUrl}`, false);
       chrome.tabs.create({
-        url: `${baseUrl}${FALLBACK_URL}`
+        url: `${baseUrl}${fallbackUrl}`
       });
       return;
     }
-    
+
     // Open the first matching item directly
     const itemId = results[0].pk;
     const url = `${baseUrl}${pattern.urlTemplate.replace('{id}', itemId)}`;
     await addToHistory(selectedText, pattern.name, url, true);
     chrome.tabs.create({ url });
-    
+
   } catch (error) {
     console.error('InvenTree lookup failed:', error);
     // On any error, copy to clipboard and open fallback
     await copyToClipboard(searchText.trim(), tabId);
-    await addToHistory(selectedText, pattern.name, `${baseUrl}${FALLBACK_URL}`, false);
+    await addToHistory(selectedText, pattern.name, `${baseUrl}${fallbackUrl}`, false);
     chrome.tabs.create({
-      url: `${baseUrl}${FALLBACK_URL}`
+      url: `${baseUrl}${fallbackUrl}`
     });
   }
 }

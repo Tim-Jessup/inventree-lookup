@@ -30,7 +30,7 @@
       margin-bottom: 5px;
       color: #555;
     }
-    input[type="text"], input[type="password"], input[type="url"] {
+    input[type="text"], input[type="password"], input[type="url"], select {
       width: 100%;
       padding: 8px 10px;
       border: 1px solid #ccc;
@@ -38,10 +38,13 @@
       font-size: 14px;
       box-sizing: border-box;
     }
-    input:focus {
+    input:focus, select:focus {
       outline: none;
       border-color: #4a90d9;
       box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.2);
+    }
+    select {
+      background: white;
     }
     button {
       background: #4a90d9;
@@ -127,7 +130,21 @@
       Get your token from InvenTree: Settings → Account Settings → Access Tokens
     </p>
   </div>
-  
+
+  <div class="field">
+    <label for="defaultLandingPage">Default Landing Page</label>
+    <select id="defaultLandingPage">
+      <option value="parts">Parts</option>
+      <option value="salesOrders">Sales Orders</option>
+      <option value="purchaseOrders">Purchase Orders</option>
+      <option value="buildOrders">Build Orders</option>
+      <option value="returnOrders">Return Orders</option>
+    </select>
+    <p class="help">
+      Page to open when searched text doesn't match a specific item
+    </p>
+  </div>
+
   <button id="save">Save Settings</button>
   <button id="test" style="background: #6c757d; margin-left: 10px;">Test Connection</button>
 
