@@ -1,10 +1,10 @@
-// InvenTree Item Lookup - Background Service Worker
+// InvenTree Item Lookup - Background Script (Firefox MV2)
 
 const MAX_HISTORY = 20;
 
 // Get the configured base URL
 async function getBaseUrl() {
-  const { inventreeUrl } = await chrome.storage.sync.get('inventreeUrl');
+  const { inventreeUrl } = await browser.storage.sync.get('inventreeUrl');
   if (!inventreeUrl) return null;
   return inventreeUrl.replace(/\/+$/, ''); // Remove trailing slashes
 }
@@ -33,7 +33,8 @@ function buildPatterns(prefixes) {
       regex: new RegExp(`^${escapeRegex(p.buildOrderPrefix)}\\d+$`, 'i'),
       apiEndpoint: '/api/build/',
       apiParam: 'reference',
-      urlTemplate: '/web/manufacturing/build-order/{id}/details'
+      urlTemplate: '/web/manufacturing/build-order/{id}/details',
+      indexUrl: '/web/manufacturing/index/buildorders'
     },
     {
       name: 'Purchase Order',
@@ -41,7 +42,8 @@ function buildPatterns(prefixes) {
       regex: new RegExp(`^${escapeRegex(p.purchaseOrderPrefix)}\\d+$`, 'i'),
       apiEndpoint: '/api/order/po/',
       apiParam: 'reference',
-      urlTemplate: '/web/purchasing/purchase-order/{id}/detail'
+      urlTemplate: '/web/purchasing/purchase-order/{id}/detail',
+      indexUrl: '/web/purchasing/index/purchaseorders'
     },
     {
       name: 'Sales Order',
@@ -49,7 +51,8 @@ function buildPatterns(prefixes) {
       regex: new RegExp(`^${escapeRegex(p.salesOrderPrefix)}\\d+$`, 'i'),
       apiEndpoint: '/api/order/so/',
       apiParam: 'reference',
-      urlTemplate: '/web/sales/sales-order/{id}/detail'
+      urlTemplate: '/web/sales/sales-order/{id}/detail',
+      indexUrl: '/web/sales/index/salesorders'
     },
     {
       name: 'Return Order',
@@ -57,14 +60,15 @@ function buildPatterns(prefixes) {
       regex: new RegExp(`^${escapeRegex(p.returnOrderPrefix)}\\d+$`, 'i'),
       apiEndpoint: '/api/order/ro/',
       apiParam: 'reference',
-      urlTemplate: '/web/sales/return-order/{id}/detail'
+      urlTemplate: '/web/sales/return-order/{id}/detail',
+      indexUrl: '/web/sales/index/returnorders'
     }
   ];
 }
 
 // Get patterns with current prefixes from storage
 async function getPatterns() {
-  const { referencePrefixes } = await chrome.storage.sync.get('referencePrefixes');
+  const { referencePrefixes } = await browser.storage.sync.get('referencePrefixes');
   return buildPatterns(referencePrefixes || {});
 }
 
@@ -79,13 +83,13 @@ const LANDING_PAGES = {
 
 // Get the fallback URL based on user preference
 async function getFallbackUrl() {
-  const { defaultLandingPage } = await chrome.storage.sync.get('defaultLandingPage');
+  const { defaultLandingPage } = await browser.storage.sync.get('defaultLandingPage');
   return LANDING_PAGES[defaultLandingPage] || LANDING_PAGES.parts;
 }
 
 // Create context menu on install
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({
+browser.runtime.onInstalled.addListener(() => {
+  browser.contextMenus.create({
     id: 'search-inventree',
     title: 'Search InvenTree for "%s"',
     contexts: ['selection']
@@ -107,12 +111,15 @@ async function findMatchingPattern(text) {
 async function copyToClipboard(text, tabId) {
   if (!tabId) return;
   try {
-    await chrome.scripting.executeScript({
-      target: { tabId: tabId },
-      func: (textToCopy) => {
-        navigator.clipboard.writeText(textToCopy);
-      },
-      args: [text]
+    await browser.tabs.executeScript(tabId, {
+      code: `navigator.clipboard.writeText(${JSON.stringify(text)}).catch(() => {
+        const el = document.createElement('textarea');
+        el.value = ${JSON.stringify(text)};
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand('copy');
+        document.body.removeChild(el);
+      });`
     });
   } catch (error) {
     console.error('Failed to copy to clipboard:', error);
@@ -121,11 +128,11 @@ async function copyToClipboard(text, tabId) {
 
 // Add item to lookup history
 async function addToHistory(reference, type, url, success) {
-  const { lookupHistory = [] } = await chrome.storage.local.get('lookupHistory');
-  
+  const { lookupHistory = [] } = await browser.storage.local.get('lookupHistory');
+
   // Remove duplicate if exists
   const filtered = lookupHistory.filter(item => item.reference !== reference);
-  
+
   // Add new entry at the beginning
   filtered.unshift({
     reference,
@@ -134,11 +141,11 @@ async function addToHistory(reference, type, url, success) {
     success,
     timestamp: Date.now()
   });
-  
+
   // Keep only the most recent entries
   const trimmed = filtered.slice(0, MAX_HISTORY);
-  
-  await chrome.storage.local.set({ lookupHistory: trimmed });
+
+  await browser.storage.local.set({ lookupHistory: trimmed });
 }
 
 // Query an API endpoint and return results
@@ -173,7 +180,7 @@ async function performLookup(searchText, tabId = null) {
 
   // Check if URL is configured
   if (!baseUrl) {
-    chrome.runtime.openOptionsPage();
+    browser.runtime.openOptionsPage();
     return;
   }
 
@@ -182,7 +189,7 @@ async function performLookup(searchText, tabId = null) {
   const fallbackUrl = await getFallbackUrl();
 
   // Get API token from storage
-  const { apiToken } = await chrome.storage.sync.get('apiToken');
+  const { apiToken } = await browser.storage.sync.get('apiToken');
 
   // If we have an order pattern match, look it up
   if (pattern && apiToken) {
@@ -191,22 +198,27 @@ async function performLookup(searchText, tabId = null) {
       if (result) {
         const url = `${baseUrl}${pattern.urlTemplate.replace('{id}', result.pk)}`;
         await addToHistory(selectedText, pattern.name, url, true);
-        chrome.tabs.create({ url });
+        browser.tabs.create({ url });
         return;
       }
     } catch (error) {
       console.error('Order lookup failed:', error);
     }
+    // Pattern matched but item not found - go to the relevant index page
+    const indexUrl = `${baseUrl}${pattern.indexUrl}`;
+    await addToHistory(selectedText, pattern.name, indexUrl, false);
+    browser.tabs.create({ url: indexUrl });
+    return;
   }
 
-  // No order pattern match (or lookup failed) - try parts API
+  // No order pattern match - try parts API
   if (apiToken) {
     try {
       const result = await queryApi(baseUrl, apiToken, '/api/part/', 'IPN', selectedText);
       if (result) {
         const url = `${baseUrl}/web/part/${result.pk}/details`;
         await addToHistory(selectedText, 'Part', url, true);
-        chrome.tabs.create({ url });
+        browser.tabs.create({ url });
         return;
       }
     } catch (error) {
@@ -217,48 +229,47 @@ async function performLookup(searchText, tabId = null) {
   // No match found - copy to clipboard and open fallback
   await copyToClipboard(searchText.trim(), tabId);
   await addToHistory(searchText.trim(), 'Search', `${baseUrl}${fallbackUrl}`, false);
-  chrome.tabs.create({
+  browser.tabs.create({
     url: `${baseUrl}${fallbackUrl}`
   });
 }
 
 // Handle context menu click
-chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+browser.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId !== 'search-inventree') return;
   await performLookup(info.selectionText, tab.id);
 });
 
 
 // Handle omnibox input
-chrome.omnibox.onInputEntered.addListener(async (text) => {
+browser.omnibox.onInputEntered.addListener(async (text) => {
   await performLookup(text);
 });
 
 // Provide suggestions in omnibox
-chrome.omnibox.onInputChanged.addListener(async (text, suggest) => {
+browser.omnibox.onInputChanged.addListener(async (text, suggest) => {
   const pattern = await findMatchingPattern(text.trim().toUpperCase());
   if (pattern) {
     suggest([{
       content: text,
-      description: `Look up ${pattern.name}: <match>${text.toUpperCase()}</match>`
+      description: `Look up ${pattern.name}: ${text.toUpperCase()}`
     }]);
   } else {
     suggest([{
       content: text,
-      description: `Look up in InvenTree: <match>${text.toUpperCase()}</match>`
+      description: `Look up in InvenTree: ${text.toUpperCase()}`
     }]);
   }
 });
 
 // Set default omnibox suggestion
-chrome.omnibox.setDefaultSuggestion({
-  description: 'InvenTree Lookup: <match>%s</match>'
+browser.omnibox.setDefaultSuggestion({
+  description: 'InvenTree Lookup: %s'
 });
 
 // Handle messages from popup
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'lookup' && message.text) {
     performLookup(message.text);
   }
 });
-

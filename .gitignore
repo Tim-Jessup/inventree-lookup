@@ -11,4 +11,5 @@ Thumbs.db
 # Build artifacts
 *.zip
 *.crx
+*.xpi
 *.pem
